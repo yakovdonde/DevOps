@@ -1,0 +1,84 @@
+-
+  name: 'Ecommerce Site Creation Playbook, ver1.0'
+  hosts: all
+  become: yes
+  vars:
+    packages:
+      - epel-release
+      - firewalld
+      - mariadb-server
+      - httpd
+      - php
+      - php-mysql
+      - git
+      - MySQL-python
+      - wget
+
+  tasks:
+    - name: 'Prerequisites - Installing required packages'
+      yum:
+        name: '{{ packages }}'
+        state: present
+
+    - name: 'Download code from GIT' #
+      command: git clone https://github.com/kodekloudhub/learning-app-ecommerce.git /var/www/html/ #
+
+    - name: 'Enable and start all installed services'
+      service:
+        name: '{{ item }}'
+        state: started
+        enabled: yes
+      loop:
+        - firewalld
+        - mariadb
+        - httpd
+
+    - name: 'Configure Firewall'
+      firewalld:
+        port: '{{item}}'
+        permanent: true
+        zone: public
+        state: enabled
+      loop:
+        - 3306/tcp
+        - 80/tcp
+
+    - name: 'Apply firewalld config'
+      service:
+        name: firewalld
+        state: restarted
+
+    - name: 'Create database user '
+      community.mysql.mysql_user:
+        name: ecomuser
+        password: ecompassword
+        priv: '*.*:ALL'
+        state: present
+
+    - name: 'Create a new database'
+      mysql_db:
+        name: ecomdb
+        state: present
+
+    - name: 'Import database contents'
+      mysql_db:
+        name: ecomdb
+        state: import
+        target: /var/www/html/assets/db-load-script.sql
+
+    - name: 'Configure php connection to the database'
+      replace:
+        path: /var/www/html/index.php
+        regexp: '172.20.1.101'
+        replace: 'localhost'
+
+    - name: 'Configure the Web Server'
+      replace:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: 'index.html'
+        replace: 'index.php'
+
+    - name: 'Restart web server'
+      service:
+        name: httpd
+        state: restarted
